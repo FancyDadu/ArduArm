@@ -1,68 +1,21 @@
 #include "ArduArm.h"
 
-void node::transaction(char type,Triple c){
-  byte i=0;
-  
-  while(_status==OK && i<3){
-    
-    switch(i){
-      
-      case 0:
-        composeMessage(type,c);
-        delay(250);
-        break;
-        
-      case 1:
-        receive();
-        
-        break;
+void node::transaction(char type, Triple c) {
 
-      case 2:
-        store();
-        break;
-    }
-    
-    i++;   
-  }
-  
-  //if(_comm.connected()) _comm.stop();
-  
+  if (_status == OK )composeMessage(type, c);
+
+
 }
 
-void node::join() {
-  Triple foo;
-  transaction('j',foo);
-  
+void node::updateTask(Triple info) {
+  transaction('r', info); //Request of new task (or stopping)
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------
 
-void node::rdfInsert(Triple cont) {
-  transaction('i',cont);
+void node::reportFault(Triple info) { //Triple with fault type , sensor data & 1 more possible field
+  transaction('a', info); //Alert
 }
 
-//------------------------------------------------------------------------------------------------------------------------------------
 
-void node::rdfRemove(Triple cont) {
-  transaction('r', cont);
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------
-
-void node::rdfQuery(Triple cont) {
-   transaction('q', cont);
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------
-
-void node::rdfSubscribe(Triple cont) {
-   transaction('s', cont);
-}
-
-//------------------------------------------------------------------------------------------------------------------------------------
-
-void node::leave(){
-  Triple foo;
-  transaction('l',foo);
-}
 

@@ -1,8 +1,7 @@
 #include "ArduArm.h"
 
-node::node(char ID[], short TR ) {
+node::node(char ID[]) {
   strcpy(_nodeID, ID);
-  _trID = TR;
   _status = OK;
 }
 
@@ -17,59 +16,6 @@ void node::begin(char SSID[MAX_SSID_LENGTH], char psw[MAX_PSW_LENGTH], short p, 
 
 byte node::getState() {
   return _status;
-}
-
-byte processChar(const char c, byte lastState) {
-  byte state;
-  /*
-    state:byte -> Bb7b6....b0
-    b7 : is a special character
-    b6 : is a terminating character -> /0
-    b5 : is an entity reference -> &
-    b4 : a tag is opened -> <
-    b3 : a tag is closed -> >
-    b2 : is a closing tag-> </
-    b1 : whitespace
-    b0 : ERROR
-
-
-
-  */
-
-  switch (c) {
-    case '<'://a tag has opened
-      if (bitRead(lastState, 4)) return 1;
-      return B10010000;
-      break;
-
-    case '>'://tag has closed
-      if (bitRead(lastState, 3)) return 1;
-      else if (bitRead(lastState, 2)) return B10001010;
-      return B10001000;
-      break;
-
-    case '/'://if a tag is opened, then it's a closing tag
-      if (bitRead(lastState, 4))return B10000100;
-      return 0;
-      break;
-
-    case '\0'://terminating character
-      return B11000000;
-      break;
-
-    case ' '://ignore it if it's in a tag
-      return B00000010;
-      break;
-
-    case '&': //entity reference? -> need to analyze those after
-      break;
-
-    default: //whatever else,either it's part of the tag name, or an entity reference,or parameter,or
-      return 0;
-      ;
-
-  }
-
 }
 
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -120,7 +66,7 @@ void node::receive() {
     #endif
 
     storage.close();
-    if (totCount > 20) {
+    if (totCount > 10) {
       _status = OK;
       return;
     }
@@ -275,58 +221,42 @@ Contents node::create(char type, char *state , Triple t) {
 
   Contents c;
 
-  /*
-     trId,nodeId,unsub,sub,obj,pred
-     the state coupled with the type of message that is being built will determine whether there's still content to be built;
-     otherwise the returning struct will have a field indicating that no more content is going to be added / searched for
-  */
-
   switch (*state) {
 
-    case 'i':
-      strcpy_P(c.type, PSTR("transaction_id"));
-      itoa(_trID, c.content, 10);
-      *state = 'n';
-      break;
-
-    case 'n':
-      strcpy_P(c.type, PSTR("node_id"));
+    case 'n': //node
+      c.type = 'i';
       strcpy(c.content, _nodeID);
-      if (type == 'j' || type == 'l') *state = 'f'; //"finished"
-      else if (type == 'u') *state = 'u';
-      else *state = 's';
+      *state = 't';
       break;
 
-    case 'u':
-      strcpy_P(c.type, PSTR("parameter name = \"subscription_id\""));
-      strcpy(c.content, _subID1);
+    case 't': //type
+      c.type = 't';
+      if (type == 'r') strcpy(c.content, "R");
+      else strcpy(c.content, "A");
       *state = 'f';
 
       break;
 
-    case 's':
-      strcpy_P(c.type, PSTR("subject type=\"uri\""));
-      strcpy(c.content, t.subject);
-      *state = 'p';
+    case 'f': //fault
+      c.type = 'f';
+      if (type == 'r') strcpy(c.content, "0");
+      else strcpy(c.content, t.fault);
+      *state = 'd';
       break;
 
-    case 'p':
-      strcpy_P(c.type, PSTR("predicate"));
-      strcpy(c.content, t.predicate);
-      *state = 'o';
+    case 'd': //data
+      c.type = 'd';
+      if (type == 'r') strcpy(c.content, "null");
+      else  strcpy(c.content, t.data);
+      *state = 'e';
       break;
 
-    case 'o':
-      strcpy_P(c.type, PSTR("object type=\"uri\""));
-      strcpy(c.content, t.object);
-      *state = 'f';
-      break;
-
-    case 'f':
+    case 'e':
     case 'z':
       *state = 'z';
 
   }
+  Serial.println(c.type);
   return c;
 }
 
@@ -360,13 +290,12 @@ void node::composeMessage(char code, Triple t) {
     Serial.println(F("File successfully opened"));
     #endif
 
-    char c, cState = 'i'; //first part of the contents chain will always be the transaction id
+    char c, cState = 'n';
     char state, lastState ; // used by the sequence reader
 
-    char tagName[MAX_NAME_SIZE] = {""}, buffer[MAX_PACKET_SIZE] = {""};
+    char tag, buffer[MAX_PACKET_SIZE] = {""};
 
-    byte i = 0, count = 0; //i : needed for knowing the length of buffered tag name
-
+    short bytecount = 0, count = 0;
     bool readingName = false, last = true;
 
     Contents curr = create(code, &cState, t);
@@ -401,17 +330,17 @@ void node::composeMessage(char code, Triple t) {
 
             #ifdef DEBUG
             Serial.print(F("Found tag: -"));
-            Serial.print(tagName);
+            Serial.print(tag);
             Serial.print(F("- Searching for: -"));
             Serial.print(curr.type);
             Serial.println("-");
             #endif
 
-            if (strncmp(tagName, curr.type, i) == 0) {
+            if (tag == curr.type) {
 
               #ifdef DEBUG
               Serial.println(F("Found content!: "));
-              Serial.println(tagName);
+              Serial.println(tag);
               #endif
 
               if (count > 0 && count + strlen(curr.content) > MAX_PACKET_SIZE - 2) {
@@ -427,15 +356,14 @@ void node::composeMessage(char code, Triple t) {
 
             }
 
-            strncpy(tagName, "", sizeof(tagName));
-            i = 0;
+            tag = 0;
           }
           readingName = false;
         }
 
       }
 
-      if (readingName) tagName[i++] = c;
+      if (readingName) tag = c;
 
       lastState = state;
     }
