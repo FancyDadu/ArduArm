@@ -18,6 +18,11 @@ byte node::getState() {
   return _status;
 }
 
+bool node::incomingData(){
+  if(_comm.available()>0) return true;
+  return false;
+}
+
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------
 void node::receive() {
 

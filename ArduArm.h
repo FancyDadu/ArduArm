@@ -60,6 +60,7 @@ class node {
 
     void updateTask(Triple info);
     void reportFault(Triple info);
+    bool incomingData();
 
   private:
     char _nodeID[MAX_ID_SIZE];
