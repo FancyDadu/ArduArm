@@ -6,17 +6,24 @@
 # Datatypes (KEYWORD1)
 #######################################
 
-node	KEYWORD1
+meArm	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
 #######################################
 
 begin	KEYWORD2
-getState	KEYWORD2
-updateTask	KEYWORD2
-reportFault	KEYWORD2
-pingServer	KEYWORD2
-incomingData	KEYWORD2
-receive	KEYWORD2
-stopConn	KEYWORD2
+openGripper	KEYWORD2
+closeGripper	KEYWORD2
+gotoPoint	KEYWORD2
+rest	KEYWORD2
+getUp	KEYWORD2
+goDirectlyTo	KEYWORD2
+gotoPointCylinder	KEYWORD2
+goDirectlyToCylinder	KEYWORD2
+isReachable	KEYWORD2
+getX	KEYWORD2
+getY	KEYWORD2
+getZ	KEYWORD2
+getR	KEYWORD2
+getTheta	KEYWORD2

@@ -3,6 +3,7 @@
 void node::transaction(char type, Triple c) {
 
   if (_status == OK )composeMessage(type, c);
+  return;
 
 
 }

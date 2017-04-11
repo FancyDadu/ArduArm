@@ -6,15 +6,15 @@ bool WiFiConnect(const char ssid[], const char pass[]) {
 
   int status = WL_IDLE_STATUS;
 
-#ifdef SHIELD_STATUS_CONTROL
+  #ifdef SHIELD_STATUS_CONTROL
   if (WiFi.status() == WL_NO_SHIELD || WiFi.firmwareVersion() != F("1.1.0")) {
 
-#ifdef DEBUG
+    #ifdef DEBUG
     Serial.println(F("Error on WiFi Shield"));
-#endif
+    #endif
     return WIFI_BAD_SHIELD;
   }
-#endif
+  #endif
 
   unsigned long startingTime = millis();
 
@@ -25,9 +25,9 @@ bool WiFiConnect(const char ssid[], const char pass[]) {
 
     if (millis() - startingTime > WIFI_TIMEOUT) {
 
-#ifdef DEBUG
+      #ifdef DEBUG
       Serial.println(F("WiFi timed out!"));
-#endif
+      #endif
 
       return WIFI_TIME_OUT;
     }
@@ -44,23 +44,23 @@ bool WiFiConnect(const char ssid[], const char pass[]) {
 
 bool initializeSD() {
 
-  if(HasSDBegun) return SD_OK;
+  if (HasSDBegun)  return true;
 
-#ifdef DEBUG
+  #ifdef DEBUG
   Serial.println(F("Init SDCard..."));
-#endif
+  #endif
 
   if (SD.begin(SS_SD_PIN)) {
-#ifdef DEBUG
+    #ifdef DEBUG
     Serial.println(F("SDCard ok."));
-#endif
+    #endif
     HasSDBegun = true;
-    return SD_OK;
+    return true;
   }
-  
-#ifdef DEBUG
+
+  #ifdef DEBUG
   Serial.println(F("SD Error!"));
-#endif
-  return SD_ERR_INI;
+  #endif
+  return false;
 }
 

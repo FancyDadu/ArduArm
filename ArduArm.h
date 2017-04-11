@@ -32,7 +32,7 @@
 #define MAX_DATA_SIZE 15
 #define MAX_ID_SIZE 20
 
-#define MAX_PACKET_SIZE 60
+#define MAX_PACKET_SIZE 35
 #define TX_LATENCY 2000
 
 struct Contents {
@@ -60,7 +60,12 @@ class node {
 
     void updateTask(Triple info);
     void reportFault(Triple info);
+
+    void pingServer();
     bool incomingData();
+    char receive();
+
+    void stopConn();
 
   private:
     char _nodeID[MAX_ID_SIZE];
@@ -70,10 +75,11 @@ class node {
     byte _ip[4];
 
     byte _status;
+    bool _connected=false;
 
     WiFiClient _comm; //socket used for main communication
 
-    void receive();
+
     void store();
     void composeMessage(char code, Triple t);
     void analyzeMessage();

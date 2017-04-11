@@ -12,212 +12,88 @@ void node::begin(char SSID[MAX_SSID_LENGTH], char psw[MAX_PSW_LENGTH], short p, 
   _ip[1] = b;
   _ip[2] = c;
   _ip[3] = d;
+  
 }
 
 byte node::getState() {
   return _status;
 }
 
-bool node::incomingData(){
-  if(_comm.available()>0) return true;
+void node::pingServer(){
+  _comm.connect(_ip, _port);
+  _comm.write("hey");
+}
+
+bool node::incomingData() {
+  if (_comm.available()) {
+    #ifdef DEBUG
+    Serial.println(F("DATA!!"));
+    #endif
+    return true;
+  }
   return false;
 }
 
+void node::stopConn() {
+  _comm.stop();
+  _connected = false;
+}
+
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------
-void node::receive() {
+char node::receive() {
 
   #ifdef DEBUG
   Serial.println(F("-----------RECEIVING----------"));
   #endif
 
-  if (!initializeSD()) {
-    _status = SD_ERR_INI;
-    return;
-  }
+  char buffer[MAX_BUFFER_LENGTH] = {""}, c = 0;
+  short bufCount = 0, totCount = 0;
 
-  SD.remove(F("store"));
-  File storage;
-  storage = SD.open(F("store"), FILE_WRITE);
-
-  if (storage) {
-
-    char buffer[MAX_BUFFER_LENGTH] = {""};
-    short bufCount = 0, totCount = 0;
-
-    while (_comm.available() > 0) {
-
-      #ifdef DEBUG
-      Serial.println(F("Receiving..."));
-      #endif
-
-      while (bufCount < MAX_BUFFER_LENGTH && _comm.available() > 0 ) { //while there's still stuff to read and available space , store it in buffer
-        buffer[bufCount++] = _comm.read();
-        #ifdef DEBUG
-        Serial.print(buffer[bufCount - 1]);
-        #endif
-      }
-
-      if (bufCount > 0) { //if there's anything inside the buffer
-        storage.write(buffer, bufCount);
-        storage.flush();
-        strcpy(buffer, "");
-        totCount += bufCount;
-        bufCount = 0;
-      }
-    }
+  while (_comm.available() > 0) {
 
     #ifdef DEBUG
-    Serial.println(F("Communication Ended. Closing file now.."));
+    Serial.println(F("Receiving..."));
     #endif
 
-    storage.close();
-    if (totCount > 10) {
-      _status = OK;
-      return;
+    while (bufCount < MAX_BUFFER_LENGTH && _comm.available() > 0 ) { //while there's still stuff to read and available space , store it in buffer
+      buffer[bufCount++] = _comm.read();
+      totCount++;
+      #ifdef DEBUG
+      Serial.print(buffer[bufCount - 1]);
+      #endif
     }
 
+    if (bufCount > 0) { //if there's anything inside the buffer
+      if (strstr(buffer, "<tx>") != NULL && strstr(buffer, "</tx>") != NULL) {
+        char *p = strstr(buffer, "<t>");
+        if (p != NULL) {
+          #ifdef DEBUG
+          Serial.println(F("New Task"));
+          #endif
+          c = *(p + sizeof(char) * 3);
+        }
+      }
+    }
+
+  }
+  
+  _comm.stop();
+  #ifdef DEBUG
+  Serial.println(F("Communication Ended."));
+  #endif
+
+
+  if (totCount > 5) {
+    _status = OK;
+  }
+  else {
     _status = TOO_SHORT;
     #ifdef DEBUG
     Serial.println(F("TOO SHORT!"));
     #endif
-    return;
   }
-
-
-  #ifdef DEBUG
-  Serial.println(F("Error on Opening File!"));
-  #endif
-
-  _status = SD_ERR_FILE;
-}
-
-//---------------------------------------------------------------------------------------------------------------------------------------------------------------
-void node::store() {
-
-  #ifdef DEBUG
-  Serial.println(F("-----------STORING----------"));
-  #endif
-
-  if (!initializeSD()) {
-    _status = SD_ERR_INI;
-    return;
-  }
-
-  File storage;
-  storage = SD.open(F("store"), FILE_READ);
-
-  if (storage) {
-
-    char c, last, type;
-    char tagName[MAX_NAME_SIZE] = {""}, id[3]; //max possible id : 999
-    bool foundT = false, foundI = false, readN = false, readT = false, readI = false;
-    byte i = 0;
-
-    while (storage.available() && !foundI) {
-
-      c = storage.read();
-
-      if (last == '<') {
-        if (c != '/') readN = true;
-      }
-
-      if (readN) {
-        if (c != '>') tagName[i++] = c;
-        else {
-          if (!foundT && strncmp_P(tagName, PSTR("transaction_type"), i) == 0) readT = true;
-          else if (!foundI && strncmp_P(tagName, PSTR("transaction_id"), i) == 0) readI = true;
-          readN = false;
-          strncpy(tagName, "", sizeof(tagName));
-          i = 0;
-        }
-      }
-
-      else {
-        if (readT) {
-          type = c;
-          readT = false;
-          foundT = true;
-        }
-
-        if (readI) {
-
-          i = 0;
-          id[i] = c;
-
-          c = storage.read();
-          while (c != '<') {
-            id[++i] = c;
-            c = storage.read();
-          }
-          if (i == 0) {
-            id[2] = id[0];
-            id[1] = '0';
-            id[0] = '0';
-          }
-          if (i == 1) {
-            id[2] = id[1];
-            id[1] = id[0];
-            id[0] = '0';
-          }
-          readI = false;
-          foundI = true;
-        }
-      }
-      last = c;
-    }
-
-    if (foundT && foundI) {
-
-      char dName[4] = {""}; //type+id
-      dName[0] = type;
-      //for (int j = 0; j < 3; j++) dName[j + 1] = id[j];
-      strncat(dName, id, sizeof(id));
-
-      SD.remove(dName);
-
-      File dest = SD.open(dName, FILE_WRITE);
-
-      if (dest) {
-        storage.seek(0);
-        while (storage.available()) {
-          dest.write(storage.read());
-        }
-        dest.close();
-        storage.close();
-        _status = OK;
-        return;
-      }
-
-      else {
-        #ifdef DEBUG
-        Serial.println("cant open dest");
-        #endif
-        _status = SD_ERR_FILE;
-      }
-
-    }
-
-    else {
-      #ifdef DEBUG
-      Serial.println(F("T/I no found"));
-      #endif
-      _status = BAD_STRUCT;
-    }
-
-  }
-
-  else {
-    #ifdef DEBUG
-    Serial.println(F("Error on reading store!"));
-    #endif
-    _status = SD_ERR_FILE;
-  }
-
-}
-//---------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-void node::analyzeMessage() {
-
+  
+  return c;
 }
 
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -251,7 +127,7 @@ Contents node::create(char type, char *state , Triple t) {
 
     case 'd': //data
       c.type = 'd';
-      if (type == 'r') strcpy(c.content, "null");
+      if (type == 'r') strcpy(c.content, t.data);
       else  strcpy(c.content, t.data);
       *state = 'e';
       break;
@@ -261,7 +137,7 @@ Contents node::create(char type, char *state , Triple t) {
       *state = 'z';
 
   }
-  Serial.println(c.type);
+
   return c;
 }
 
@@ -288,40 +164,32 @@ void node::composeMessage(char code, Triple t) {
   #endif
 
   xtemp = SD.open(name, FILE_READ);
-  _comm.connect(_ip, _port);
+  if (!_connected) _comm.connect(_ip, _port);
   if (xtemp) {
 
     #ifdef DEBUG
     Serial.println(F("File successfully opened"));
     #endif
 
-    char c, cState = 'n';
-    char state, lastState ; // used by the sequence reader
-
-    char tag, buffer[MAX_PACKET_SIZE] = {""};
+    char c, tag, lastChar, cState = 'n';
 
     short bytecount = 0, count = 0;
     bool readingName = false, last = true;
 
     Contents curr = create(code, &cState, t);
 
-    while (xtemp.available() > 0) {
+    while (xtemp.available() >0) {
 
       c = xtemp.read();
-      state = c;
-      buffer[count++] = c;
-
-      if (count > MAX_PACKET_SIZE - 2 || xtemp.peek() <= 0) {
-        _comm.write(buffer);
-        strncpy(buffer, "", sizeof(buffer));
-        count = 0;
+      _comm.write(c);
+      count++;
+      if (count > MAX_PACKET_SIZE) {
         delay(TX_LATENCY);
       }
 
-
       if (cState != 'z') { //z means no more content to be added
 
-        if (lastState == '<' && state != '/' ) { //that is , a tag has been opened but it's not a closing one
+        if (lastChar == '<' && c != '/' ) { //that is , a tag has been opened but it's not a closing one
 
           readingName = true;
           #ifdef DEBUG
@@ -329,7 +197,7 @@ void node::composeMessage(char code, Triple t) {
           #endif
         }
 
-        if (state == '>') {
+        if (c == '>') {
 
           if (readingName) { //finished reading tagName
 
@@ -348,15 +216,8 @@ void node::composeMessage(char code, Triple t) {
               Serial.println(tag);
               #endif
 
-              if (count > 0 && count + strlen(curr.content) > MAX_PACKET_SIZE - 2) {
-                _comm.write(buffer);
-                count = 0;
-                strncpy(buffer, "", sizeof(buffer));
-                delay(TX_LATENCY);
-              }
 
-              strcat(buffer, curr.content);
-              count += strlen(curr.content);
+              _comm.write(curr.content);
               curr = create(code, &cState, t);
 
             }
@@ -370,9 +231,9 @@ void node::composeMessage(char code, Triple t) {
 
       if (readingName) tag = c;
 
-      lastState = state;
+      lastChar = c;
     }
-    _comm.println();
+
     xtemp.close();
 
     _status = OK;
